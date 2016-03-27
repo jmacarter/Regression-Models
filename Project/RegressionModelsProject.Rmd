@@ -1,0 +1,152 @@
+---
+title: 'Regression models Course Assignment'
+author: "Jeff Carter"
+date: "March 27, 2016"
+output: pdf_document
+---
+     
+## <a name="introduction"></a> Introduction and executive summary
+The goal of this document is to respond to 2 main questions: "is an automatic or manual transmission better for MPG", "what is the MPG difference between automatic and manual transmissions". The data are briefly described in Section [Material](#material). We explain how we build our models in Section [Methods and results](#methodsResults). Responses to the above mentioned questions are given in Section [Discussion](#Discussion).
+          
+          
+## <a name="material"></a> Material
+The *mtcars* data are the input data. More information can be found about this data set by typing $?mtcars$ in R.  
+```{r echo=FALSE, results='hide', message=FALSE}
+     options(warn=-1)
+     library(car)
+     data(mtcars)
+     ?mtcars
+     str(mtcars)
+     df <- mtcars
+     df$cyl <- as.factor(mtcars$cyl)
+     df$am <- as.factor(mtcars$am)
+     df$vs <- as.factor(mtcars$vs)
+     df$gear <- as.factor(mtcars$gear)
+     df$carb <- as.factor(mtcars$carb)
+```
+          
+## <a name="methodsResults"></a> Methods and results
+We first explore the data.   
+Using a scatterplot matrix (see [Appendix](#Appendix)), one can see that most of the predictors seem to have some impact on MPG. At this point, we do not see obvious outliers.
+
+Let's fit a linear model with all variables. 
+```{r echo=TRUE, results='hide', cache=TRUE, message=FALSE}
+fit <- lm(mpg ~ ., data=df)
+summary(fit)
+```
+               
+None of the variables shows a P-value smaller than 0.05. Let's select a subset of these variables using the AIC stepwise selection and the regsubsets function from the R *leaps* package. 
+```{r echo=TRUE,results='hide',message=FALSE}
+# AIC stepwise selection (both direction)
+library(MASS)
+stepB <- stepAIC(fit, direction="both")
+# confirming our variable selection with a second method
+library(leaps)
+leaps <- regsubsets(mpg ~ ., data = df, nbest = 10)
+```
+Both methods recommend to use the variables *wt, am, hp and cyl* as predictors in the model, where we retrieve our variable of interest *am* (see [Appendix](#Appendix) for the results of the regsubsets function).
+```{r echo=TRUE, results='hide', message=FALSE}
+fitR <- lm(mpg ~ wt + am + hp + cyl, data=df)
+summary(fitR)
+```
+The intercept and the variables *wt*, *hp* and *cyl6* show p-values smaller than 0.05 (more details in the appendix). 
+Let's have a look at the residuals plots to assess how well this model fits the data. 
+Based on the residuals plots, it seems that the model has some difficulty to fit the data with low or high MPG values. Let's see how we may correct this based on our scatterplot matrix (see [Appendix](#Appendix)).
+```{r echo=FALSE, results='hide',fig.keep='none', message=FALSE}
+scatterplotMatrix(df[,c('mpg','am','wt','cyl','hp')],diagonal='histogram')
+```
+                         
+There seems to be some non linear function between MPG and WT. Let's see whether a log(wt) instead of wt may improve the model and how the residual plots have changed. 
+```{r echo=TRUE, results='hide', message=FALSE}
+fitR2 <- lm(mpg ~ log(wt) +  hp + cyl + am, data=df)
+anova(fitR2)
+```
+The curvature of the residuals vs fitted values has been reduced. Similarly, the squared of the standardized residuals plot does not show anymore an increasing slope. The normal Q-Q plots seem to show less deviation from the normality for the error term. Based on the plot "standardized residuals vs leverage", none of the points is above a Cook's distance threshold of 0.5, which indicates that none of the point distorts the outcome and accuracy of our regression model. See [Appendix](#Appendix) for more details.
+                              
+```{r echo=FALSE, results='hide', message=FALSE}
+ifitR2 <- influence(fitR2)
+par(mfrow=c(1,1))
+hat <- ifitR2$hat
+```
+The hat values obtained with the influence function describes the influence each observed value has on each fitted value. 1 point seems to have more influence on the fitted values: "Maserati Bora. However this point is not dramatically high (see [Appendix](#Appendix)). The final selected model is *mpg ~ log(wt) + hp + cyl + am*.
+                              
+## <a name="Discussion"></a> Discussion
+In this section both questions mentioned in [the Introduction](#Introduction) are answered based the model built in Section [Methods and results](#methodsResults). Summary of the model is given the [Appendix](#Appendix).
+```{r echo=FALSE, results='hide', message=FALSE}
+summary(fitR2) 
+```
+Here is how to understand the coefficients of the model:
+
+Numerical variables
+
+- for every 1% increase in *log(wt)* we expect a decrease of 10.133 in *mpg*, all the other variables constant,
+- for every 1% increase in *hp* we expect a decrease of 0.027 in *mpg*, all the other variables constant,
+
+Factor variables
+
+- if we have 6 cylinders (*cyl6*), *mpg* changes by -2.205 compared to having 4 cylinders, all the other variables constant,
+- if we have 8 cylinders (*cyl8*), *mpg* changes by -1.789 compared to having 4 cylinders, all the other variables constant,
+- if we have a manual transmission (*am1*), *mpg* changes by 0.867 compared to having an automatic transmission, all the other variables constant. 
+
+```{r echo=TRUE, message=FALSE}
+(ci <- confint(fitR2))
+```
+Looking at the 95%-confidence interval of the estimates, one can see that the AM variable shows the interval [-2.04,3.77]. So it is not possible to tell whether an automatic transmission is better for MPG than a manual one. With the likelihood ratio test, we can say at least that adding the AM term in our model is not significantly better for estimating MPG as shown in the [Appendix](#Appendix).
+                              
+## <a name="Appendix"></a> Appendix
+
+### Scatterplot matrix of all variables including MPG. 
+```{r echo=TRUE, message=FALSE}
+scatterplotMatrix(df,diagonal='histogram')
+```
+
+### Fit using all variables.
+```{r echo=TRUE, message=FALSE}
+summary(fit)
+```
+
+### Variable selection using the stepAIC from the MASS package and the regsubsets function from the leaps package.
+```{r echo=TRUE, message=FALSE}
+stepB$anova # display results
+plot(leaps,scale="r2")
+```
+
+### Summary of the model *mpg ~ wt + am + hp + cyl*
+```{r echo=TRUE, message=FALSE}
+summary(fitR)
+```
+
+### Residuals for the model *mpg ~ wt + am + hp + cyl*
+```{r echo=TRUE, message=FALSE}
+par(mfrow=c(2,2))
+plot(fitR)
+```
+
+### Scatterplot matrix for the model *mpg ~ wt + am + hp + cyl*
+```{r echo=TRUE, message=FALSE}
+scatterplotMatrix(df[,c('mpg','am','wt','cyl','hp')],diagonal='histogram')
+```
+
+### Boxplot of the hat values for the model *mpg ~ log(wt) + am + hp + cyl*
+```{r echo=TRUE, message=FALSE}
+boxplot(hat,ylab="Hat value")
+#identify(rep(1, length(hat)), hat, labels = names(hat))
+```
+
+### Residuals for the model *mpg ~ log(wt) + am + hp + cyl*
+```{r echo=TRUE, message=FALSE}
+par(mfrow=c(2,2))
+plot(fitR2)
+```
+
+### Fit summary for the model *mpg ~ log(wt) + am + hp + cyl*
+```{r echo=TRUE, message=FALSE}
+summary(fitR2) 
+```
+
+### Comparing the models with and without *am* (*mpg ~ log(wt) + am + hp + cyl* VS *mpg ~ log(wt) + hp + cyl*)
+```{r echo=FALSE, message=FALSE}
+library("lmtest")
+fitR2R <- lm(mpg ~ log(wt) + hp + cyl, data=df)
+lrtest(fitR2, fitR2R)
+```
